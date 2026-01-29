@@ -1,0 +1,21 @@
+{
+  "name": "farm-backend",
+  "version": "0.1.0",
+  "description": "Backend и Telegram-бот для фермы mini-app (Youdic_Bot)",
+  "main": "src/server.js",
+  "type": "module",
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node src/server.js",
+    "bot": "node src/bot.js"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "dependencies": {
+    "cors": "^2.8.6",
+    "dotenv": "^16.4.5",
+    "express": "^4.21.2",
+    "telegraf": "^4.16.3"
+  }
+}
