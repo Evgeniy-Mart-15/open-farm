@@ -88,6 +88,44 @@ app.post('/api/daily/claim', (req, res) => {
   return res.json(result);
 });
 
+// Создание ссылки на оплату для mini-app
+app.post('/api/payments/create-invoice', async (req, res) => {
+  const { userId, packageId } = req.body || {};
+  if (!userId || !packageId) {
+    return res.status(400).json({ error: 'userId and packageId required' });
+  }
+  
+  const GEM_PACKAGES = [
+    { id: 'gems_10', gems: 10, stars: 1, title: '10 гемов', description: 'Маленький набор гемов' },
+    { id: 'gems_50', gems: 50, stars: 5, title: '50 гемов', description: 'Средний набор гемов' },
+    { id: 'gems_150', gems: 150, stars: 10, title: '150 гемов', description: 'Большой набор гемов' },
+  ];
+  
+  const pkg = GEM_PACKAGES.find(p => p.id === packageId);
+  if (!pkg) {
+    return res.status(400).json({ error: 'Invalid packageId' });
+  }
+  
+  if (!bot) {
+    return res.status(500).json({ error: 'Bot not initialized' });
+  }
+  
+  try {
+    const invoiceLink = await bot.telegram.createInvoiceLink({
+      title: pkg.title,
+      description: pkg.description,
+      payload: JSON.stringify({ oderId: Date.now(), pkgId: pkg.id, userId }),
+      provider_token: '',
+      currency: 'XTR',
+      prices: [{ label: pkg.title, amount: pkg.stars }],
+    });
+    return res.json({ ok: true, invoiceLink });
+  } catch (err) {
+    console.error('Create invoice error:', err);
+    return res.status(500).json({ error: 'Failed to create invoice' });
+  }
+});
+
 app.post('/api/payments/add-gems', (req, res) => {
   const { userId, gems, paymentId } = req.body || {};
   if (!userId || !gems || gems < 1) return res.status(400).json({ error: 'userId and gems (>= 1) required' });
