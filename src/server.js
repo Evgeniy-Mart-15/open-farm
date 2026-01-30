@@ -146,7 +146,7 @@ if (BOT_TOKEN) {
   });
 
   // Webhook endpoint
-  app.use('/webhook', bot.webhookCallback('/webhook'));
+  app.use(bot.webhookCallback('/webhook'));
 }
 
 // ===== START =====
