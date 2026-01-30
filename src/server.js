@@ -271,7 +271,18 @@ app.listen(PORT, async () => {
         { command: 'mini_app', description: 'Open mini-app / Открыть мини-апп' },
         { command: 'donate', description: 'Buy gems / Купить гемы' }
       ]);
+      
+      // Устанавливаем глобальный Menu Button для всех чатов
+      const menuButtonUrl = WEBAPP_ORIGIN + '?v=7';
+      await bot.telegram.callApi('setChatMenuButton', {
+        menu_button: {
+          type: 'web_app',
+          text: 'Open Farm',
+          web_app: { url: menuButtonUrl }
+        }
+      });
       console.log(`Telegram bot webhook set to ${webhookUrl}`);
+      console.log(`Menu button set to ${menuButtonUrl}`);
     } catch (err) {
       console.error('Failed to set webhook:', err.message);
     }
