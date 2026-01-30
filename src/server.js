@@ -32,7 +32,7 @@ app.use(express.json());
 // ===== API =====
 
 app.get('/health', (req, res) => {
-  res.json({ ok: true, version: '0.3.0', bot: !!BOT_TOKEN });
+  res.json({ ok: true, version: '0.4.0', bot: !!BOT_TOKEN });
 });
 
 app.get('/api/farm', (req, res) => {
@@ -145,6 +145,70 @@ if (BOT_TOKEN) {
     }
   });
 
+  // ===== TELEGRAM STARS PAYMENTS =====
+
+  // Пакеты гемов для покупки
+  const GEM_PACKAGES = [
+    { id: 'gems_10', gems: 10, stars: 1, title: '10 гемов', description: 'Маленький набор гемов' },
+    { id: 'gems_50', gems: 50, stars: 5, title: '50 гемов', description: 'Средний набор гемов' },
+    { id: 'gems_150', gems: 150, stars: 10, title: '150 гемов', description: 'Большой набор гемов' },
+  ];
+
+  // Команда /donate — показать варианты покупки
+  bot.command('donate', async (ctx) => {
+    const buttons = GEM_PACKAGES.map(pkg => 
+      [Markup.button.callback(`${pkg.title} — ${pkg.stars} ⭐`, `buy_${pkg.id}`)]
+    );
+    await ctx.reply(
+      '💎 Купи гемы за Telegram Stars!\n\nГемы помогают ускорять рост и получать бонусы.',
+      Markup.inlineKeyboard(buttons)
+    );
+  });
+
+  // Обработка нажатия на кнопку покупки
+  GEM_PACKAGES.forEach(pkg => {
+    bot.action(`buy_${pkg.id}`, async (ctx) => {
+      await ctx.answerCbQuery();
+      await ctx.replyWithInvoice({
+        title: pkg.title,
+        description: pkg.description,
+        payload: JSON.stringify({ oderId: Date.now(), pkgId: pkg.id, userId: ctx.from.id }),
+        provider_token: '', // Пустой для Telegram Stars
+        currency: 'XTR', // XTR = Telegram Stars
+        prices: [{ label: pkg.title, amount: pkg.stars }],
+      });
+    });
+  });
+
+  // Подтверждение платежа (обязательно ответить за 10 секунд)
+  bot.on('pre_checkout_query', async (ctx) => {
+    await ctx.answerPreCheckoutQuery(true);
+  });
+
+  // Успешный платёж — начисляем гемы
+  bot.on('message', async (ctx, next) => {
+    if (ctx.message?.successful_payment) {
+      const payment = ctx.message.successful_payment;
+      try {
+        const payload = JSON.parse(payment.invoice_payload);
+        const pkg = GEM_PACKAGES.find(p => p.id === payload.pkgId);
+        if (pkg && ctx.from?.id) {
+          const userId = String(ctx.from.id);
+          const user = getOrCreateUser(userId);
+          updateUser(userId, {
+            resources: { ...user.resources, gems: (user.resources?.gems ?? 0) + pkg.gems }
+          });
+          await ctx.reply(`✅ Спасибо за покупку!\n\n+${pkg.gems} 💎 гемов добавлено на твой счёт.`);
+        }
+      } catch (e) {
+        console.error('Payment processing error:', e);
+        await ctx.reply('Платёж получен! Гемы скоро будут начислены.');
+      }
+      return;
+    }
+    return next();
+  });
+
   // Webhook endpoint
   app.use(bot.webhookCallback('/webhook'));
 }
@@ -160,7 +224,8 @@ app.listen(PORT, async () => {
       await bot.telegram.setWebhook(webhookUrl);
       await bot.telegram.setMyCommands([
         { command: 'start', description: 'Start / Начать' },
-        { command: 'mini_app', description: 'Open mini-app / Открыть мини-апп' }
+        { command: 'mini_app', description: 'Open mini-app / Открыть мини-апп' },
+        { command: 'donate', description: 'Buy gems / Купить гемы' }
       ]);
       console.log(`Telegram bot webhook set to ${webhookUrl}`);
     } catch (err) {
