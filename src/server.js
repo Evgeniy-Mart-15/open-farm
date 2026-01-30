@@ -15,7 +15,7 @@ const RENDER_URL = process.env.RENDER_EXTERNAL_URL || process.env.WEBHOOK_URL ||
 const corsOrigins = [
   WEBAPP_ORIGIN,
   'http://localhost:4173',
-  'https://openfarmiks.netlify.app'
+  'https://openfarmikc.netlify.app'
 ].filter(Boolean);
 
 app.use(
