@@ -158,7 +158,7 @@ if (BOT_TOKEN) {
       }
     }
 
-    const webAppUrl = WEBAPP_ORIGIN + '?v=4';
+    const webAppUrl = WEBAPP_ORIGIN + '?v=' + Date.now();
     const text =
       `Привет, ${user.first_name || 'фермер'}! 🌱\n` +
       'Это мини‑игра‑ферма. Открывай мини‑апп и выращивай помидоры, огурцы, коров и кур.\n' +
@@ -173,7 +173,7 @@ if (BOT_TOKEN) {
 
   bot.command('mini_app', async (ctx) => {
     const user = ctx.from;
-    const webAppUrl = WEBAPP_ORIGIN + '?v=4';
+    const webAppUrl = WEBAPP_ORIGIN + '?v=' + Date.now();
     const text = `Привет, ${user.first_name || 'фермер'}! 🌱\nОткрывай мини‑апп и играй в ферму.`;
 
     if (webAppUrl.startsWith('https://')) {
