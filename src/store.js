@@ -124,3 +124,39 @@ export function getReferralStats(userId) {
     rewardsGems: referredCount * REFERRAL_REWARD_GEMS
   };
 }
+
+/** Глобальная статистика для аналитики */
+export function getGlobalStats() {
+  ensureLoaded();
+  
+  let totalUsers = 0;
+  let totalReferrals = 0;
+  let totalCoins = 0;
+  let totalGems = 0;
+  let activeToday = 0;
+  
+  const now = Date.now();
+  const dayMs = 24 * 60 * 60 * 1000;
+  
+  for (const u of users.values()) {
+    totalUsers++;
+    if (u.referrerId) totalReferrals++;
+    totalCoins += u.resources?.coins ?? 0;
+    totalGems += u.resources?.gems ?? 0;
+    
+    // Активен сегодня (обновлял данные за последние 24ч)
+    if (u.updatedAt) {
+      const updated = new Date(u.updatedAt).getTime();
+      if (now - updated < dayMs) activeToday++;
+    }
+  }
+  
+  return {
+    totalUsers,
+    totalReferrals,
+    totalCoins,
+    totalGems,
+    activeToday,
+    updatedAt: new Date().toISOString()
+  };
+}

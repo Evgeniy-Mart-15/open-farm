@@ -2,7 +2,7 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { Telegraf, Markup } from 'telegraf';
-import { getOrCreateUser, saveFarmState, updateUser, bindReferrer, getReferralStats, claimDaily } from './store.js';
+import { getOrCreateUser, saveFarmState, updateUser, bindReferrer, getReferralStats, claimDaily, getGlobalStats } from './store.js';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -124,6 +124,12 @@ app.post('/api/payments/create-invoice', async (req, res) => {
     console.error('Create invoice error:', err);
     return res.status(500).json({ error: 'Failed to create invoice' });
   }
+});
+
+// Получить общую статистику (для админки / аналитики)
+app.get('/api/stats', (req, res) => {
+  const stats = getGlobalStats();
+  return res.json(stats);
 });
 
 app.post('/api/payments/add-gems', (req, res) => {
