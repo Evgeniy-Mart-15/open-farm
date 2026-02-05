@@ -88,6 +88,17 @@ app.post('/api/daily/claim', (req, res) => {
   return res.json(result);
 });
 
+// Пакеты гемов — единый источник правды (кнопки и сумма платежа в звёздах)
+const GEM_PACKAGES_PAYMENTS = [
+  { id: 'gems_50', gems: 50, stars: 10, title: '50 гемов', description: '50 гемов за 10 ⭐' },
+  { id: 'gems_100', gems: 100, stars: 20, title: '100 гемов', description: '100 гемов за 20 ⭐' },
+  { id: 'gems_200', gems: 200, stars: 25, title: '200 гемов', description: '200 гемов за 25 ⭐' },
+];
+
+app.get('/api/payments/packages', (req, res) => {
+  return res.json({ packages: GEM_PACKAGES_PAYMENTS });
+});
+
 // Создание ссылки на оплату для mini-app
 app.post('/api/payments/create-invoice', async (req, res) => {
   const { userId, packageId } = req.body || {};
@@ -95,13 +106,7 @@ app.post('/api/payments/create-invoice', async (req, res) => {
     return res.status(400).json({ error: 'userId and packageId required' });
   }
   
-  const GEM_PACKAGES = [
-    { id: 'gems_10', gems: 10, stars: 1, title: '10 гемов', description: 'Маленький набор гемов' },
-    { id: 'gems_50', gems: 50, stars: 5, title: '50 гемов', description: 'Средний набор гемов' },
-    { id: 'gems_150', gems: 150, stars: 10, title: '150 гемов', description: 'Большой набор гемов' },
-  ];
-  
-  const pkg = GEM_PACKAGES.find(p => p.id === packageId);
+  const pkg = GEM_PACKAGES_PAYMENTS.find(p => p.id === packageId);
   if (!pkg) {
     return res.status(400).json({ error: 'Invalid packageId' });
   }
@@ -111,6 +116,7 @@ app.post('/api/payments/create-invoice', async (req, res) => {
   }
   
   try {
+    // amount в XTR = количество звёзд (10, 20 или 25)
     const invoiceLink = await bot.telegram.createInvoiceLink({
       title: pkg.title,
       description: pkg.description,
@@ -190,17 +196,11 @@ if (BOT_TOKEN) {
   });
 
   // ===== TELEGRAM STARS PAYMENTS =====
-
-  // Пакеты гемов для покупки
-  const GEM_PACKAGES = [
-    { id: 'gems_10', gems: 10, stars: 1, title: '10 гемов', description: 'Маленький набор гемов' },
-    { id: 'gems_50', gems: 50, stars: 5, title: '50 гемов', description: 'Средний набор гемов' },
-    { id: 'gems_150', gems: 150, stars: 10, title: '150 гемов', description: 'Большой набор гемов' },
-  ];
+  // Используем общий список пакетов (amount в invoice = pkg.stars — 10, 20 или 25 звёзд)
 
   // Команда /donate — показать варианты покупки
   bot.command('donate', async (ctx) => {
-    const buttons = GEM_PACKAGES.map(pkg => 
+    const buttons = GEM_PACKAGES_PAYMENTS.map(pkg => 
       [Markup.button.callback(`${pkg.title} — ${pkg.stars} ⭐`, `buy_${pkg.id}`)]
     );
     await ctx.reply(
@@ -209,16 +209,16 @@ if (BOT_TOKEN) {
     );
   });
 
-  // Обработка нажатия на кнопку покупки
-  GEM_PACKAGES.forEach(pkg => {
+  // Обработка нажатия на кнопку покупки (amount = pkg.stars — 10, 20 или 25)
+  GEM_PACKAGES_PAYMENTS.forEach(pkg => {
     bot.action(`buy_${pkg.id}`, async (ctx) => {
       await ctx.answerCbQuery();
       await ctx.replyWithInvoice({
         title: pkg.title,
         description: pkg.description,
         payload: JSON.stringify({ oderId: Date.now(), pkgId: pkg.id, userId: ctx.from.id }),
-        provider_token: '', // Пустой для Telegram Stars
-        currency: 'XTR', // XTR = Telegram Stars
+        provider_token: '',
+        currency: 'XTR',
         prices: [{ label: pkg.title, amount: pkg.stars }],
       });
     });
@@ -235,7 +235,7 @@ if (BOT_TOKEN) {
       const payment = ctx.message.successful_payment;
       try {
         const payload = JSON.parse(payment.invoice_payload);
-        const pkg = GEM_PACKAGES.find(p => p.id === payload.pkgId);
+        const pkg = GEM_PACKAGES_PAYMENTS.find(p => p.id === payload.pkgId);
         if (pkg && ctx.from?.id) {
           const userId = String(ctx.from.id);
           const user = getOrCreateUser(userId);
