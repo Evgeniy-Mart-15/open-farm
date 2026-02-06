@@ -132,6 +132,41 @@ app.post('/api/payments/create-invoice', async (req, res) => {
   }
 });
 
+// Кастомный платёж: пользователь сам выбирает количество гемов
+// Курс: 1 звезда = 5 гемов (округление вверх)
+app.post('/api/payments/create-custom-invoice', async (req, res) => {
+  const { userId, gems } = req.body || {};
+  const gemsInt = Number(gems);
+  if (!userId || !gemsInt || gemsInt <= 0) {
+    return res.status(400).json({ error: 'userId and positive gems required' });
+  }
+
+  if (!bot) {
+    return res.status(500).json({ error: 'Bot not initialized' });
+  }
+
+  try {
+    const stars = Math.max(1, Math.ceil(gemsInt / 5));
+
+    const title = `${gemsInt} гемов`;
+    const description = `${gemsInt} 💎 за ${stars} ⭐`;
+
+    const invoiceLink = await bot.telegram.createInvoiceLink({
+      title,
+      description,
+      payload: JSON.stringify({ oderId: Date.now(), customGems: gemsInt, customStars: stars, userId }),
+      provider_token: '',
+      currency: 'XTR',
+      prices: [{ label: title, amount: stars }],
+    });
+
+    return res.json({ ok: true, invoiceLink });
+  } catch (err) {
+    console.error('Create custom invoice error:', err);
+    return res.status(500).json({ error: 'Failed to create custom invoice' });
+  }
+});
+
 // Получить общую статистику (для админки / аналитики)
 app.get('/api/stats', (req, res) => {
   const stats = getGlobalStats();
@@ -235,14 +270,25 @@ if (BOT_TOKEN) {
       const payment = ctx.message.successful_payment;
       try {
         const payload = JSON.parse(payment.invoice_payload);
-        const pkg = GEM_PACKAGES_PAYMENTS.find(p => p.id === payload.pkgId);
-        if (pkg && ctx.from?.id) {
-          const userId = String(ctx.from.id);
-          const user = getOrCreateUser(userId);
-          updateUser(userId, {
-            resources: { ...user.resources, gems: (user.resources?.gems ?? 0) + pkg.gems }
-          });
-          await ctx.reply(`✅ Спасибо за покупку!\n\n+${pkg.gems} 💎 гемов добавлено на твой счёт.`);
+        const userId = ctx.from?.id ? String(ctx.from.id) : null;
+
+        if (userId) {
+          let gemsAmount = 0;
+
+          const pkg = payload.pkgId ? GEM_PACKAGES_PAYMENTS.find(p => p.id === payload.pkgId) : null;
+          if (pkg) {
+            gemsAmount = pkg.gems;
+          } else if (payload.customGems && payload.customStars) {
+            gemsAmount = Number(payload.customGems) || 0;
+          }
+
+          if (gemsAmount > 0) {
+            const user = getOrCreateUser(userId);
+            updateUser(userId, {
+              resources: { ...user.resources, gems: (user.resources?.gems ?? 0) + gemsAmount }
+            });
+            await ctx.reply(`✅ Спасибо за покупку!\n\n+${gemsAmount} 💎 гемов добавлено на твой счёт.`);
+          }
         }
       } catch (e) {
         console.error('Payment processing error:', e);
