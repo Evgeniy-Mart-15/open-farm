@@ -9,7 +9,9 @@ function defaultUser(userId) {
   return {
     id: userId,
     referrerId: null,
+    username: null,
     lastDailyAt: null,
+    dailyStreakDay: 1,
     createdAt: new Date().toISOString(),
     updatedAt: new Date().toISOString(),
     ...getInitialFarmState()
@@ -62,7 +64,17 @@ export function updateUser(userId, patch) {
   return next;
 }
 
-export function saveFarmState(userId, state) {
+/** Начислить гемы пользователю (атомарно для оплаты). */
+export function addGems(userId, amount) {
+  const user = getOrCreateUser(userId);
+  const current = user.resources?.gems ?? 0;
+  const nextGems = current + Math.max(0, Math.floor(Number(amount)));
+  return updateUser(userId, {
+    resources: { ...(user.resources || {}), gems: nextGems }
+  });
+}
+
+export function saveFarmState(userId, state, username) {
   const user = getOrCreateUser(userId);
   const next = {
     ...user,
@@ -70,6 +82,7 @@ export function saveFarmState(userId, state) {
     resources: { ...user.resources, ...state.resources },
     crops: Array.isArray(state.crops) ? state.crops : user.crops,
     animals: Array.isArray(state.animals) ? state.animals : user.animals,
+    ...(username !== undefined && username !== null && { username: String(username) }),
     updatedAt: new Date().toISOString()
   };
   users.set(userId, next);
@@ -94,22 +107,44 @@ export function bindReferrer(userId, referrerId) {
 }
 
 const DAILY_COOLDOWN_MS = 24 * 60 * 60 * 1000;
-const DAILY_REWARD_COINS = 10;
+/** Марафон 5 дней: день 1 — 20 монет + 5 корма, 2 — 30+5, 3 — 40+5, 4 — 50+5, 5 — 100 гемов + 20 корма. */
+const DAILY_MARATHON = [
+  { coins: 20, gems: 0, feed: 5 },
+  { coins: 30, gems: 0, feed: 5 },
+  { coins: 40, gems: 0, feed: 5 },
+  { coins: 50, gems: 0, feed: 5 },
+  { coins: 0, gems: 100, feed: 20 }
+];
 
-/** Забрать ежедневную награду. Возвращает { claimed, reward, nextAt }. */
+/** Забрать ежедневную награду (марафон 1–5 дней). Возвращает { claimed, reward: { coins, gems, feed }, streak, nextAt }. */
 export function claimDaily(userId) {
   const user = getOrCreateUser(userId);
   const now = Date.now();
   const last = user.lastDailyAt ? new Date(user.lastDailyAt).getTime() : 0;
+  const streakDay = Math.min(5, Math.max(1, (user.dailyStreakDay ?? 1)));
   if (now - last < DAILY_COOLDOWN_MS && last > 0) {
-    return { claimed: false, reward: 0, nextAt: last + DAILY_COOLDOWN_MS };
+    return { claimed: false, reward: null, streak: streakDay, nextAt: last + DAILY_COOLDOWN_MS };
   }
-  const coins = (user.resources?.coins ?? 0) + DAILY_REWARD_COINS;
+  const missedDay = last > 0 && (now - last) >= 2 * DAILY_COOLDOWN_MS;
+  const dayIndex = missedDay ? 0 : streakDay - 1;
+  const reward = DAILY_MARATHON[dayIndex];
+  const nextStreak = missedDay ? 1 : ((streakDay % 5) + 1);
+  const coins = (user.resources?.coins ?? 0) + reward.coins;
+  const gems = (user.resources?.gems ?? 0) + reward.gems;
+  const feed = (user.resources?.feed ?? 5) + reward.feed;
   updateUser(userId, {
-    resources: { ...user.resources, coins },
-    lastDailyAt: new Date(now).toISOString()
+    resources: { ...user.resources, coins, gems, feed },
+    lastDailyAt: new Date(now).toISOString(),
+    dailyStreakDay: nextStreak
   });
-  return { claimed: true, reward: DAILY_REWARD_COINS, nextAt: now + DAILY_COOLDOWN_MS };
+  const currentStreak = missedDay ? 1 : streakDay;
+  return {
+    claimed: true,
+    reward: { coins: reward.coins, gems: reward.gems, feed: reward.feed },
+    streak: currentStreak,
+    nextAt: now + DAILY_COOLDOWN_MS,
+    resources: { coins, gems, feed }
+  };
 }
 
 /** Статистика рефералов: сколько приглашено и сколько гемов начислено */
@@ -158,5 +193,19 @@ export function getGlobalStats() {
     totalGems,
     activeToday,
     updatedAt: new Date().toISOString()
+  };
+}
+
+/** Фабрика для использования в server: один интерфейс (все методы возвращают Promise). */
+export function createFileStore() {
+  return {
+    getOrCreateUser: (userId) => Promise.resolve(getOrCreateUser(userId)),
+    updateUser: (userId, patch) => Promise.resolve(updateUser(userId, patch)),
+    addGems: (userId, amount) => Promise.resolve(addGems(userId, amount)),
+    saveFarmState: (userId, state, username) => Promise.resolve(saveFarmState(userId, state, username)),
+    bindReferrer: (userId, referrerId) => Promise.resolve(bindReferrer(userId, referrerId)),
+    claimDaily: (userId) => Promise.resolve(claimDaily(userId)),
+    getReferralStats: (userId) => Promise.resolve(getReferralStats(userId)),
+    getGlobalStats: () => Promise.resolve(getGlobalStats())
   };
 }

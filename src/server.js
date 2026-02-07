@@ -2,7 +2,6 @@ import 'dotenv/config';
 import express from 'express';
 import cors from 'cors';
 import { Telegraf, Markup } from 'telegraf';
-import { getOrCreateUser, saveFarmState, updateUser, bindReferrer, getReferralStats, claimDaily, getGlobalStats } from './store.js';
 
 const app = express();
 const PORT = process.env.PORT || 4000;
@@ -29,63 +28,10 @@ app.use(
 );
 app.use(express.json());
 
-// ===== API =====
+// ===== API (маршруты регистрируются в main() с store) =====
 
 app.get('/health', (req, res) => {
   res.json({ ok: true, version: '0.4.0', bot: !!BOT_TOKEN });
-});
-
-app.get('/api/farm', (req, res) => {
-  const userId = String(req.query.userId || '');
-  if (!userId) return res.status(400).json({ error: 'userId is required' });
-  const user = getOrCreateUser(userId);
-  const state = {
-    level: user.level,
-    resources: user.resources,
-    crops: user.crops,
-    animals: user.animals,
-    referrerId: user.referrerId ?? null
-  };
-  return res.json({ state });
-});
-
-app.post('/api/farm/sync', (req, res) => {
-  const { userId, state } = req.body || {};
-  if (!userId || !state) return res.status(400).json({ error: 'userId and state are required' });
-  const updated = saveFarmState(userId, state);
-  return res.json({
-    state: {
-      level: updated.level,
-      resources: updated.resources,
-      crops: updated.crops,
-      animals: updated.animals
-    }
-  });
-});
-
-app.post('/api/referral/bind', (req, res) => {
-  const { userId, referrerId } = req.body || {};
-  if (!userId || !referrerId) return res.status(400).json({ error: 'userId and referrerId are required' });
-  const user = bindReferrer(userId, referrerId);
-  return res.json({ ok: true, referrerId: user.referrerId });
-});
-
-app.get('/api/referral/stats', (req, res) => {
-  const userId = String(req.query.userId || '');
-  if (!userId) return res.status(400).json({ error: 'userId is required' });
-  const stats = getReferralStats(userId);
-  return res.json(stats);
-});
-
-app.post('/api/daily/claim', (req, res) => {
-  const userId = String(req.body?.userId ?? req.query?.userId ?? '');
-  if (!userId) return res.status(400).json({ error: 'userId required' });
-  const result = claimDaily(userId);
-  if (result.claimed) {
-    const user = getOrCreateUser(userId);
-    return res.json({ ...result, coins: user.resources.coins });
-  }
-  return res.json(result);
 });
 
 // Пакеты гемов — единый источник правды (кнопки и сумма платежа в звёздах)
@@ -94,6 +40,85 @@ const GEM_PACKAGES_PAYMENTS = [
   { id: 'gems_100', gems: 100, stars: 20, title: '100 гемов', description: '100 гемов за 20 ⭐' },
   { id: 'gems_200', gems: 200, stars: 25, title: '200 гемов', description: '200 гемов за 25 ⭐' },
 ];
+
+/** Регистрирует маршруты, зависящие от store (файл или MongoDB). */
+function registerRoutes(store) {
+  app.get('/api/farm', async (req, res) => {
+    const userId = String(req.query.userId || '');
+    if (!userId) return res.status(400).json({ error: 'userId is required' });
+    const user = await store.getOrCreateUser(userId);
+    let referrerUsername = null;
+    if (user.referrerId) {
+      try {
+        const referrer = await store.getOrCreateUser(user.referrerId);
+        referrerUsername = referrer.username ?? null;
+      } catch {
+        // ignore
+      }
+    }
+    const state = {
+      level: user.level,
+      resources: user.resources,
+      crops: user.crops,
+      animals: user.animals,
+      referrerId: user.referrerId ?? null,
+      referrerUsername,
+      username: user.username ?? null
+    };
+    return res.json({ state });
+  });
+
+  app.post('/api/farm/sync', async (req, res) => {
+    const { userId, state, username } = req.body || {};
+    if (!userId || !state) return res.status(400).json({ error: 'userId and state are required' });
+    const updated = await store.saveFarmState(userId, state, username);
+    return res.json({
+      state: {
+        level: updated.level,
+        resources: updated.resources,
+        crops: updated.crops,
+        animals: updated.animals
+      }
+    });
+  });
+
+  app.post('/api/referral/bind', async (req, res) => {
+    const { userId, referrerId } = req.body || {};
+    if (!userId || !referrerId) return res.status(400).json({ error: 'userId and referrerId are required' });
+    const user = await store.bindReferrer(userId, referrerId);
+    return res.json({ ok: true, referrerId: user.referrerId });
+  });
+
+  app.get('/api/referral/stats', async (req, res) => {
+    const userId = String(req.query.userId || '');
+    if (!userId) return res.status(400).json({ error: 'userId is required' });
+    const stats = await store.getReferralStats(userId);
+    return res.json(stats);
+  });
+
+  app.post('/api/daily/claim', async (req, res) => {
+    const userId = String(req.body?.userId ?? req.query?.userId ?? '');
+    if (!userId) return res.status(400).json({ error: 'userId required' });
+    const result = await store.claimDaily(userId);
+    return res.json(result);
+  });
+
+  app.get('/api/stats', async (req, res) => {
+    const stats = await store.getGlobalStats();
+    return res.json(stats);
+  });
+
+  app.post('/api/payments/add-gems', async (req, res) => {
+    const { userId, gems, paymentId } = req.body || {};
+    if (!userId || !gems || gems < 1) return res.status(400).json({ error: 'userId and gems (>= 1) required' });
+    const user = await store.getOrCreateUser(userId);
+    const add = Math.floor(Number(gems));
+    const updated = await store.updateUser(userId, {
+      resources: { ...user.resources, gems: (user.resources?.gems ?? 0) + add }
+    });
+    return res.json({ ok: true, gems: updated.resources.gems, paymentId: paymentId ?? null });
+  });
+}
 
 app.get('/api/payments/packages', (req, res) => {
   return res.json({ packages: GEM_PACKAGES_PAYMENTS });
@@ -132,6 +157,34 @@ app.post('/api/payments/create-invoice', async (req, res) => {
   }
 });
 
+// Подтверждение оплаты из мини-аппа (когда пришёл callback "paid") — на случай если webhook не дошёл
+app.post('/api/payments/confirm-paid', async (req, res) => {
+  const { userId, packageId, gems: gemsFromBody } = req.body || {};
+  const uid = userId != null ? String(userId) : '';
+  if (!uid) {
+    return res.status(400).json({ error: 'userId required' });
+  }
+  let gemsToAdd = 0;
+  if (packageId) {
+    const pkg = GEM_PACKAGES_PAYMENTS.find(p => p.id === packageId);
+    if (pkg) gemsToAdd = pkg.gems;
+  } else if (gemsFromBody != null) {
+    gemsToAdd = Math.max(0, Math.floor(Number(gemsFromBody)));
+  }
+  if (gemsToAdd <= 0) {
+    return res.status(400).json({ error: 'packageId or gems required' });
+  }
+  try {
+    const updated = await store.addGems(uid, gemsToAdd);
+    const newTotal = updated?.resources?.gems ?? 0;
+    console.log(`Confirm-paid: credited ${gemsToAdd} gems to ${uid}, new total ${newTotal}`);
+    return res.json({ ok: true, gems: newTotal });
+  } catch (e) {
+    console.error('Confirm-paid error:', e);
+    return res.status(500).json({ error: 'Failed to add gems' });
+  }
+});
+
 // Кастомный платёж: пользователь сам выбирает количество гемов
 // Курс: 1 звезда = 5 гемов (округление вверх)
 app.post('/api/payments/create-custom-invoice', async (req, res) => {
@@ -167,43 +220,38 @@ app.post('/api/payments/create-custom-invoice', async (req, res) => {
   }
 });
 
-// Получить общую статистику (для админки / аналитики)
-app.get('/api/stats', (req, res) => {
-  const stats = getGlobalStats();
-  return res.json(stats);
-});
-
-app.post('/api/payments/add-gems', (req, res) => {
-  const { userId, gems, paymentId } = req.body || {};
-  if (!userId || !gems || gems < 1) return res.status(400).json({ error: 'userId and gems (>= 1) required' });
-  const user = getOrCreateUser(userId);
-  const add = Math.floor(Number(gems));
-  const updated = updateUser(userId, {
-    resources: { ...user.resources, gems: (user.resources?.gems ?? 0) + add }
-  });
-  return res.json({ ok: true, gems: updated.resources.gems, paymentId: paymentId ?? null });
-});
-
-// ===== TELEGRAM BOT (webhook) =====
+// ===== TELEGRAM BOT (webhook) — создаётся в main() с доступом к store =====
 
 let bot = null;
 
-if (BOT_TOKEN) {
-  bot = new Telegraf(BOT_TOKEN);
+function getMongoUri() {
+  return process.env.MONGODB_URI || process.env.MONGO_URI || process.env.MONGO_URL || process.env.MONGODB_URL || '';
+}
 
-  bot.start(async (ctx) => {
-    const user = ctx.from;
-    const startParam = ctx.startPayload;
+async function main() {
+  const mongoUri = getMongoUri();
+  const store = mongoUri
+    ? await (await import('./store-mongo.js')).createStore(mongoUri)
+    : (await import('./store.js')).createFileStore();
 
-    let refInfo = '';
-    if (startParam && startParam.startsWith('ref_')) {
-      const referrerId = startParam.slice('ref_'.length);
-      refInfo = `\nТебя пригласил пользователь с id: ${referrerId}`;
-      // Привязываем реферера
-      if (user?.id) {
-        bindReferrer(String(user.id), referrerId);
+  console.log(mongoUri ? 'Store: MongoDB' : 'Store: JSON file (data/users.json)');
+  registerRoutes(store);
+
+  if (BOT_TOKEN) {
+    bot = new Telegraf(BOT_TOKEN);
+
+    bot.start(async (ctx) => {
+      const user = ctx.from;
+      const startParam = ctx.startPayload;
+
+      let refInfo = '';
+      if (startParam && startParam.startsWith('ref_')) {
+        const referrerId = startParam.slice('ref_'.length);
+        refInfo = `\nТебя пригласил пользователь с id: ${referrerId}`;
+        if (user?.id) {
+          await store.bindReferrer(String(user.id), referrerId);
+        }
       }
-    }
 
     const webAppUrl = WEBAPP_ORIGIN + '?v=' + Date.now();
     const text =
@@ -261,80 +309,103 @@ if (BOT_TOKEN) {
 
   // Подтверждение платежа (обязательно ответить за 10 секунд)
   bot.on('pre_checkout_query', async (ctx) => {
-    await ctx.answerPreCheckoutQuery(true);
+    try {
+      await ctx.answerPreCheckoutQuery(true);
+    } catch (e) {
+      console.error('pre_checkout_query error:', e);
+      try {
+        await ctx.answerPreCheckoutQuery(false, 'Временная ошибка. Попробуйте ещё раз.');
+      } catch (_) {}
+    }
   });
 
-  // Успешный платёж — начисляем гемы
+  // Успешный платёж — начисляем гемы (store.addGems для атомарности и надёжности)
   bot.on('message', async (ctx, next) => {
-    if (ctx.message?.successful_payment) {
-      const payment = ctx.message.successful_payment;
-      try {
-        const payload = JSON.parse(payment.invoice_payload);
-        const userId = ctx.from?.id ? String(ctx.from.id) : null;
-
-        if (userId) {
-          let gemsAmount = 0;
-
-          const pkg = payload.pkgId ? GEM_PACKAGES_PAYMENTS.find(p => p.id === payload.pkgId) : null;
-          if (pkg) {
-            gemsAmount = pkg.gems;
-          } else if (payload.customGems && payload.customStars) {
-            gemsAmount = Number(payload.customGems) || 0;
-          }
-
-          if (gemsAmount > 0) {
-            const user = getOrCreateUser(userId);
-            updateUser(userId, {
-              resources: { ...user.resources, gems: (user.resources?.gems ?? 0) + gemsAmount }
-            });
-            await ctx.reply(`✅ Спасибо за покупку!\n\n+${gemsAmount} 💎 гемов добавлено на твой счёт.`);
-          }
-        }
-      } catch (e) {
-        console.error('Payment processing error:', e);
-        await ctx.reply('Платёж получен! Гемы скоро будут начислены.');
+    if (!ctx.message?.successful_payment) return next();
+    const payment = ctx.message.successful_payment;
+    let payload = {};
+    try {
+      if (typeof payment.invoice_payload === 'string') {
+        payload = JSON.parse(payment.invoice_payload);
       }
+    } catch (e) {
+      console.error('Payment payload parse error:', e);
+    }
+    const userId = (ctx.from?.id != null ? String(ctx.from.id) : null) || (payload.userId != null ? String(payload.userId) : null);
+    if (!userId) {
+      console.error('Payment: no userId', { payload, from: ctx.from?.id });
+      try {
+        await ctx.reply('Платёж получен. Ошибка: не определён пользователь.');
+      } catch (_) {}
       return;
     }
-    return next();
+    let gemsAmount = 0;
+    const pkg = payload.pkgId ? GEM_PACKAGES_PAYMENTS.find(p => p.id === payload.pkgId) : null;
+    if (pkg) {
+      gemsAmount = pkg.gems;
+    } else if (payload.customGems != null) {
+      gemsAmount = Math.floor(Number(payload.customGems)) || 0;
+    }
+    if (gemsAmount <= 0) {
+      console.error('Payment: no gemsAmount', { payload, userId });
+      try {
+        await ctx.reply('Платёж получен! Спасибо.');
+      } catch (_) {}
+      return;
+    }
+    try {
+      const updated = await store.addGems(userId, gemsAmount);
+      const newTotal = updated?.resources?.gems ?? 0;
+      console.log(`Payment: credited ${gemsAmount} gems to user ${userId}, new total ${newTotal}`);
+      await ctx.reply(`✅ Спасибо за покупку!\n\n+${gemsAmount} 💎 гемов добавлено на твой счёт.`);
+    } catch (e) {
+      console.error('Payment processing error:', e);
+      try {
+        await ctx.reply('Платёж получен! Гемы скоро будут начислены. Если баланс не обновился — открой мини-приложение и зайди в Магазин.');
+      } catch (_) {}
+    }
   });
 
   // Webhook endpoint
   app.use(bot.webhookCallback('/webhook'));
+  }
+
+  // ===== START =====
+  app.listen(PORT, async () => {
+    console.log(`Farm backend listening on http://localhost:${PORT}`);
+
+    if (bot && RENDER_URL) {
+      try {
+        const webhookUrl = `${RENDER_URL}/webhook`;
+        await bot.telegram.setWebhook(webhookUrl);
+        await bot.telegram.setMyCommands([
+          { command: 'start', description: 'Start / Начать' },
+          { command: 'mini_app', description: 'Open mini-app / Открыть мини-апп' },
+          { command: 'donate', description: 'Buy gems / Купить гемы' }
+        ]);
+
+        const menuButtonUrl = WEBAPP_ORIGIN + '?v=7';
+        await bot.telegram.callApi('setChatMenuButton', {
+          menu_button: {
+            type: 'web_app',
+            text: 'Open Farm',
+            web_app: { url: menuButtonUrl }
+          }
+        });
+        console.log(`Telegram bot webhook set to ${webhookUrl}`);
+        console.log(`Menu button set to ${menuButtonUrl}`);
+      } catch (err) {
+        console.error('Failed to set webhook:', err.message);
+      }
+    } else if (bot) {
+      console.log('Bot token found but no RENDER_URL/WEBHOOK_URL — run bot.js separately for long polling');
+    }
+  });
 }
 
-// ===== START =====
-
-app.listen(PORT, async () => {
-  console.log(`Farm backend listening on http://localhost:${PORT}`);
-
-  if (bot && RENDER_URL) {
-    try {
-      const webhookUrl = `${RENDER_URL}/webhook`;
-      await bot.telegram.setWebhook(webhookUrl);
-      await bot.telegram.setMyCommands([
-        { command: 'start', description: 'Start / Начать' },
-        { command: 'mini_app', description: 'Open mini-app / Открыть мини-апп' },
-        { command: 'donate', description: 'Buy gems / Купить гемы' }
-      ]);
-      
-      // Устанавливаем глобальный Menu Button для всех чатов
-      const menuButtonUrl = WEBAPP_ORIGIN + '?v=7';
-      await bot.telegram.callApi('setChatMenuButton', {
-        menu_button: {
-          type: 'web_app',
-          text: 'Open Farm',
-          web_app: { url: menuButtonUrl }
-        }
-      });
-      console.log(`Telegram bot webhook set to ${webhookUrl}`);
-      console.log(`Menu button set to ${menuButtonUrl}`);
-    } catch (err) {
-      console.error('Failed to set webhook:', err.message);
-    }
-  } else if (bot) {
-    console.log('Bot token found but no RENDER_URL/WEBHOOK_URL — run bot.js separately for long polling');
-  }
+main().catch((err) => {
+  console.error(err);
+  process.exit(1);
 });
 
 process.once('SIGINT', () => { if (bot) bot.stop('SIGINT'); process.exit(0); });
