@@ -43,6 +43,32 @@ const GEM_PACKAGES_PAYMENTS = [
 
 /** Регистрирует маршруты, зависящие от store (файл или MongoDB). */
 function registerRoutes(store) {
+  // Единственный источник истины для game state (гемы, монеты, слоты). Mini App обязан запрашивать после оплаты.
+  app.get('/api/me', async (req, res) => {
+    const userId = String(req.query.userId || '');
+    if (!userId) return res.status(400).json({ error: 'userId is required' });
+    const user = await store.getOrCreateUser(userId);
+    let referrerUsername = null;
+    if (user.referrerId) {
+      try {
+        const referrer = await store.getOrCreateUser(user.referrerId);
+        referrerUsername = referrer.username ?? null;
+      } catch {
+        // ignore
+      }
+    }
+    return res.json({
+      id: userId,
+      level: user.level,
+      resources: user.resources,
+      crops: user.crops,
+      animals: user.animals,
+      referrerId: user.referrerId ?? null,
+      referrerUsername,
+      username: user.username ?? null
+    });
+  });
+
   app.get('/api/farm', async (req, res) => {
     const userId = String(req.query.userId || '');
     if (!userId) return res.status(400).json({ error: 'userId is required' });
@@ -119,7 +145,7 @@ function registerRoutes(store) {
     return res.json({ ok: true, gems: updated.resources.gems, paymentId: paymentId ?? null });
   });
 
-  // Подтверждение оплаты из мини-аппа (callback "paid") — store в scope только здесь
+  // Подтверждение оплаты из мини-аппа: только addGems. Оплата = только gems, ничего больше.
   app.post('/api/payments/confirm-paid', async (req, res) => {
     const { userId, packageId, gems: gemsFromBody } = req.body || {};
     const uid = userId != null ? String(userId) : '';
@@ -319,7 +345,7 @@ async function main() {
     }
   });
 
-  // Успешный платёж — начисляем гемы (store.addGems для атомарности и надёжности)
+  // ОПЛАТА НАПРЯМУЮ СВЯЗАНА С GEMS. Успешный платёж → только addGems. Никаких coins, items, условий.
   bot.on('message', async (ctx, next) => {
     if (!ctx.message?.successful_payment) return next();
     const payment = ctx.message.successful_payment;
