@@ -118,6 +118,34 @@ function registerRoutes(store) {
     });
     return res.json({ ok: true, gems: updated.resources.gems, paymentId: paymentId ?? null });
   });
+
+  // Подтверждение оплаты из мини-аппа (callback "paid") — store в scope только здесь
+  app.post('/api/payments/confirm-paid', async (req, res) => {
+    const { userId, packageId, gems: gemsFromBody } = req.body || {};
+    const uid = userId != null ? String(userId) : '';
+    if (!uid) {
+      return res.status(400).json({ error: 'userId required' });
+    }
+    let gemsToAdd = 0;
+    if (packageId) {
+      const pkg = GEM_PACKAGES_PAYMENTS.find(p => p.id === packageId);
+      if (pkg) gemsToAdd = pkg.gems;
+    } else if (gemsFromBody != null) {
+      gemsToAdd = Math.max(0, Math.floor(Number(gemsFromBody)));
+    }
+    if (gemsToAdd <= 0) {
+      return res.status(400).json({ error: 'packageId or gems required' });
+    }
+    try {
+      const updated = await store.addGems(uid, gemsToAdd);
+      const newTotal = updated?.resources?.gems ?? 0;
+      console.log(`Confirm-paid: credited ${gemsToAdd} gems to ${uid}, new total ${newTotal}`);
+      return res.json({ ok: true, gems: newTotal });
+    } catch (e) {
+      console.error('Confirm-paid error:', e);
+      return res.status(500).json({ error: 'Failed to add gems' });
+    }
+  });
 }
 
 app.get('/api/payments/packages', (req, res) => {
@@ -154,34 +182,6 @@ app.post('/api/payments/create-invoice', async (req, res) => {
   } catch (err) {
     console.error('Create invoice error:', err);
     return res.status(500).json({ error: 'Failed to create invoice' });
-  }
-});
-
-// Подтверждение оплаты из мини-аппа (когда пришёл callback "paid") — на случай если webhook не дошёл
-app.post('/api/payments/confirm-paid', async (req, res) => {
-  const { userId, packageId, gems: gemsFromBody } = req.body || {};
-  const uid = userId != null ? String(userId) : '';
-  if (!uid) {
-    return res.status(400).json({ error: 'userId required' });
-  }
-  let gemsToAdd = 0;
-  if (packageId) {
-    const pkg = GEM_PACKAGES_PAYMENTS.find(p => p.id === packageId);
-    if (pkg) gemsToAdd = pkg.gems;
-  } else if (gemsFromBody != null) {
-    gemsToAdd = Math.max(0, Math.floor(Number(gemsFromBody)));
-  }
-  if (gemsToAdd <= 0) {
-    return res.status(400).json({ error: 'packageId or gems required' });
-  }
-  try {
-    const updated = await store.addGems(uid, gemsToAdd);
-    const newTotal = updated?.resources?.gems ?? 0;
-    console.log(`Confirm-paid: credited ${gemsToAdd} gems to ${uid}, new total ${newTotal}`);
-    return res.json({ ok: true, gems: newTotal });
-  } catch (e) {
-    console.error('Confirm-paid error:', e);
-    return res.status(500).json({ error: 'Failed to add gems' });
   }
 });
 
