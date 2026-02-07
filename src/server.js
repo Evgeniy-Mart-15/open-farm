@@ -34,7 +34,8 @@ app.get('/health', (req, res) => {
   res.json({ ok: true, version: '0.4.0', bot: !!BOT_TOKEN });
 });
 
-// Пакеты гемов — единый источник правды (кнопки и сумма платежа в звёздах)
+// Пакеты гемов — ЕДИНСТВЕННОЕ место, где задаются цены и количество. Меняй здесь — фронт подхватит через GET /api/payments/packages.
+// id должен совпадать с тем, что шлёт мини-апп (createInvoice/confirm-paid). Если меняешь пакеты — меняй только этот массив.
 const GEM_PACKAGES_PAYMENTS = [
   { id: 'gems_50', gems: 50, stars: 10, title: '50 гемов', description: '50 гемов за 10 ⭐' },
   { id: 'gems_100', gems: 100, stars: 20, title: '100 гемов', description: '100 гемов за 20 ⭐' },
