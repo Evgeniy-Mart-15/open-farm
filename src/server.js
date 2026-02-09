@@ -267,25 +267,31 @@ async function main() {
   if (BOT_TOKEN) {
     bot = new Telegraf(BOT_TOKEN);
 
-    // Устанавливаем меню-кнопку с uid для этого чата, чтобы при открытии мини-апп из меню сразу показывал настоящую версию
+    // Устанавливаем меню-кнопку (и кнопку на обложке чата) с uid, чтобы открывалась настоящая версия
+    async function setMenuButtonWithUid(chatId, userId) {
+      if (!chatId || !userId || !WEBAPP_ORIGIN.startsWith('https://')) return;
+      try {
+        await bot.telegram.callApi('setChatMenuButton', {
+          chat_id: chatId,
+          menu_button: {
+            type: 'web_app',
+            text: 'Open Farm',
+            web_app: { url: WEBAPP_ORIGIN + `?uid=${userId}` }
+          }
+        });
+      } catch (_) { /* игнорируем ошибки API */ }
+    }
+
     bot.use(async (ctx, next) => {
       if (ctx.chat?.type === 'private' && ctx.from?.id) {
-        try {
-          await bot.telegram.callApi('setChatMenuButton', {
-            chat_id: ctx.chat.id,
-            menu_button: {
-              type: 'web_app',
-              text: 'Open Farm',
-              web_app: { url: WEBAPP_ORIGIN + `?uid=${ctx.from.id}` }
-            }
-          });
-        } catch (_) { /* игнорируем ошибки API */ }
+        await setMenuButtonWithUid(ctx.chat.id, ctx.from.id);
       }
       return next();
     });
 
     bot.start(async (ctx) => {
       const user = ctx.from;
+      await setMenuButtonWithUid(ctx.chat?.id, user?.id);
       const startParam = ctx.startPayload;
 
       let refInfo = '';
@@ -414,6 +420,7 @@ async function main() {
       const updated = await store.addGems(userId, gemsAmount);
       const newTotal = updated?.resources?.gems ?? 0;
       console.log(`Payment: credited ${gemsAmount} gems to user ${userId}, new total ${newTotal}`);
+      await setMenuButtonWithUid(ctx.chat?.id, userId);
       await ctx.reply(`✅ Спасибо за покупку!\n\n+${gemsAmount} 💎 гемов добавлено на твой счёт.`);
     } catch (e) {
       console.error('Payment processing error:', e);
