@@ -267,6 +267,23 @@ async function main() {
   if (BOT_TOKEN) {
     bot = new Telegraf(BOT_TOKEN);
 
+    // Устанавливаем меню-кнопку с uid для этого чата, чтобы при открытии мини-апп из меню сразу показывал настоящую версию
+    bot.use(async (ctx, next) => {
+      if (ctx.chat?.type === 'private' && ctx.from?.id) {
+        try {
+          await bot.telegram.callApi('setChatMenuButton', {
+            chat_id: ctx.chat.id,
+            menu_button: {
+              type: 'web_app',
+              text: 'Open Farm',
+              web_app: { url: WEBAPP_ORIGIN + `?uid=${ctx.from.id}` }
+            }
+          });
+        } catch (_) { /* игнорируем ошибки API */ }
+      }
+      return next();
+    });
+
     bot.start(async (ctx) => {
       const user = ctx.from;
       const startParam = ctx.startPayload;
@@ -424,16 +441,15 @@ async function main() {
           { command: 'donate', description: 'Buy gems / Купить гемы' }
         ]);
 
-        const menuButtonUrl = WEBAPP_ORIGIN + '?v=7';
+        // Глобальная меню-кнопка без uid (для тех, кто ещё ни разу не писал боту); при первом сообщении ставим per-chat с uid
         await bot.telegram.callApi('setChatMenuButton', {
           menu_button: {
             type: 'web_app',
             text: 'Open Farm',
-            web_app: { url: menuButtonUrl }
+            web_app: { url: WEBAPP_ORIGIN + '?v=7' }
           }
         });
         console.log(`Telegram bot webhook set to ${webhookUrl}`);
-        console.log(`Menu button set to ${menuButtonUrl}`);
       } catch (err) {
         console.error('Failed to set webhook:', err.message);
       }
