@@ -305,6 +305,19 @@ async function main() {
     }
   });
 
+  // Админ-версия mini-app с параметром ?admin=1 для диагностики (только для тебя)
+  bot.command('admin', async (ctx) => {
+    const user = ctx.from;
+    const webAppUrl = WEBAPP_ORIGIN + '?admin=1&v=' + Date.now();
+    const text = `Привет, ${user.first_name || 'фермер'}! 🌱\nАдмин-режим: открой мини-апп для диагностики.`;
+
+    if (webAppUrl.startsWith('https://')) {
+      await ctx.reply(text, Markup.inlineKeyboard([[Markup.button.webApp('Открыть mini-app (admin)', webAppUrl)]]));
+    } else {
+      await ctx.reply(`${text}\n\nЛокальный адрес: ${webAppUrl}`, Markup.inlineKeyboard([[Markup.button.url('Открыть mini-app (admin)', webAppUrl)]]));
+    }
+  });
+
   // ===== TELEGRAM STARS PAYMENTS =====
   // Используем общий список пакетов (amount в invoice = pkg.stars — 10, 20 или 25 звёзд)
 

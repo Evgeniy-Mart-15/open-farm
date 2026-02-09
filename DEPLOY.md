@@ -55,10 +55,11 @@ git config --global user.name "Твоё Имя"
 | Key            | Value |
 |----------------|--------|
 | `BOT_TOKEN`    | Твой токен бота от @BotFather |
-| `WEBAPP_ORIGIN`| `https://openfarmik.netlify.app` |
+| `WEBAPP_ORIGIN`| `https://openfarmik.netlify.app` (или твой домен мини-аппа) |
+| `MONGODB_URI`  | Строка подключения к MongoDB (например из Railway: `mongodb://user:password@host:port`) |
 | `NODE_ENV`     | `production` (опционально) |
 
-**PORT** указывать не нужно — Render сам задаёт порт.
+**PORT** указывать не нужно — Render сам задаёт порт. Бэкенд остаётся на Render; база — в переменной **MONGODB_URI** (поддерживаются также **MONGO_URI**, **MONGO_URL**, **MONGODB_URL**).
 
 ---
 
@@ -110,6 +111,6 @@ npm run build
 ## Важно
 
 - На бесплатном тарире Render «засыпает» сервис после ~15 минут без запросов. Первый запрос после паузы может идти 30–60 секунд — это нормально.
-- Файл **data/users.json** на Render при перезапуске сервиса может теряться (диск временный). Для постоянного хранения данных позже можно подключить базу (Postgres на Render или другую).
+- Без MongoDB данные хранятся в **data/users.json**; на Render при перезапуске они могут теряться (диск временный). Для постоянного хранения задай в **Environment** переменную с URL MongoDB. Бэкенд смотрит (в таком порядке): **MONGODB_URI**, **MONGO_URI**, **MONGO_URL**, **MONGODB_URL** — подставь ту, которую даёт твой хостинг или MongoDB Atlas.
 
 Если что-то на каком-то шаге не получится — напиши, на каком шаге и что именно делаешь, подскажу по шагам.
