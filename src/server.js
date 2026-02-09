@@ -280,7 +280,7 @@ async function main() {
         }
       }
 
-    const webAppUrl = WEBAPP_ORIGIN + '?v=' + Date.now();
+    const webAppUrl = WEBAPP_ORIGIN + `?uid=${user.id}&v=` + Date.now();
     const text =
       `Привет, ${user.first_name || 'фермер'}! 🌱\n` +
       'Это мини‑игра‑ферма. Открывай мини‑апп и выращивай помидоры, огурцы, коров и кур.\n' +
@@ -295,7 +295,7 @@ async function main() {
 
   bot.command('mini_app', async (ctx) => {
     const user = ctx.from;
-    const webAppUrl = WEBAPP_ORIGIN + '?v=' + Date.now();
+    const webAppUrl = WEBAPP_ORIGIN + `?uid=${user.id}&v=` + Date.now();
     const text = `Привет, ${user.first_name || 'фермер'}! 🌱\nОткрывай мини‑апп и играй в ферму.`;
 
     if (webAppUrl.startsWith('https://')) {
@@ -308,7 +308,7 @@ async function main() {
   // Админ-версия mini-app с параметром ?admin=1 для диагностики (только для тебя)
   bot.command('admin', async (ctx) => {
     const user = ctx.from;
-    const webAppUrl = WEBAPP_ORIGIN + '?admin=1&v=' + Date.now();
+    const webAppUrl = WEBAPP_ORIGIN + `?admin=1&uid=${user.id}&v=` + Date.now();
     const text = `Привет, ${user.first_name || 'фермер'}! 🌱\nАдмин-режим: открой мини-апп для диагностики.`;
 
     if (webAppUrl.startsWith('https://')) {
