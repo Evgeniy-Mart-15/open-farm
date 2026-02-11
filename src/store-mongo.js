@@ -82,9 +82,12 @@ export async function createStore(uri) {
 
   async function saveFarmState(userId, state, username) {
     const user = await getOrCreateUser(userId);
-    // Клиентское состояние — источник истины для монет и гемов внутри игры.
-    // Отдельные начисления из оплаты идут через addGems и уже учитываются в user.resources.
-    const resources = { ...user.resources, ...state.resources };
+    // Для монет и прогресса слотов источником истины считается клиент.
+    // Для гемов берём максимум из серверного и клиентского значения, чтобы не потерять уже начисленные оплаты.
+    const serverGems = user.resources?.gems ?? 0;
+    const clientGems = state.resources?.gems ?? 0;
+    const merged = { ...user.resources, ...state.resources };
+    const resources = { ...merged, gems: Math.max(serverGems, clientGems) };
     const next = {
       ...user,
       level: state.level ?? user.level,
