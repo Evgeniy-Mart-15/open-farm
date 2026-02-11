@@ -83,12 +83,8 @@ export function saveFarmState(userId, state, username) {
   if (serverRevision > 0 && (clientRevision === 0 || clientRevision < serverRevision)) {
     return user;
   }
-  // Для монет и прогресса слотов источником истины считаем клиент.
-  // Для гемов берём максимум из серверного и клиентского значения, чтобы не потерять уже начисленные оплаты.
-  const serverGems = user.resources?.gems ?? 0;
-  const clientGems = state.resources?.gems ?? 0;
-  const merged = { ...user.resources, ...state.resources };
-  const resources = { ...merged, gems: Math.max(serverGems, clientGems) };
+  // Ревизия клиента >= серверной → клиент — источник истины для ВСЕХ ресурсов (включая гемы).
+  const resources = { ...user.resources, ...state.resources };
   const next = {
     ...user,
     level: state.level ?? user.level,

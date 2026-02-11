@@ -108,12 +108,9 @@ export async function createStore(uri) {
     if (serverRevision > 0 && (clientRevision === 0 || clientRevision < serverRevision)) {
       return user;
     }
-    // Для монет и прогресса слотов источником истины считается клиент.
-    // Для гемов берём максимум из серверного и клиентского значения, чтобы не потерять уже начисленные оплаты.
-    const serverGems = user.resources?.gems ?? 0;
-    const clientGems = state.resources?.gems ?? 0;
-    const merged = { ...user.resources, ...state.resources };
-    const resources = { ...merged, gems: Math.max(serverGems, clientGems) };
+    // Ревизия клиента >= серверной → клиент — источник истины для ВСЕХ ресурсов (включая гемы).
+    // Покупки гемов защищены через addGems ($inc) + forceRefreshFromServer на клиенте.
+    const resources = { ...user.resources, ...state.resources };
     const nextRevision =
       clientRevision > 0 ? clientRevision : (serverRevision > 0 ? serverRevision : 0) + 1;
     const next = {
