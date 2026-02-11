@@ -7,6 +7,8 @@ const app = express();
 const PORT = process.env.PORT || 4000;
 const WEBAPP_ORIGIN = process.env.WEBAPP_ORIGIN || 'http://localhost:4173';
 const BOT_TOKEN = process.env.BOT_TOKEN;
+// Telegram ID администратора, который может выдавать награды (гемы/монеты) через админский mini-app
+const ADMIN_TG_ID = process.env.ADMIN_TG_ID || '';
 
 // Render даёт URL сервиса через RENDER_EXTERNAL_URL
 const RENDER_URL = process.env.RENDER_EXTERNAL_URL || process.env.WEBHOOK_URL || '';
@@ -171,6 +173,39 @@ function registerRoutes(store) {
     } catch (e) {
       console.error('Confirm-paid error:', e);
       return res.status(500).json({ error: 'Failed to add gems' });
+    }
+  });
+
+  // Admin: начислить награду любому пользователю (гемы или монеты) — только для владельца бота.
+  app.post('/api/admin/reward', async (req, res) => {
+    try {
+      const { adminId, targetUserId, resource, amount } = req.body || {};
+      const admin = String(adminId || '');
+      const targetId = String(targetUserId || '');
+      const kind = resource === 'gems' || resource === 'coins' ? resource : null;
+      const num = Math.floor(Number(amount || 0));
+
+      if (!ADMIN_TG_ID) {
+        return res.status(403).json({ error: 'Admin rewards are disabled (no ADMIN_TG_ID)' });
+      }
+      if (!admin || admin !== ADMIN_TG_ID) {
+        return res.status(403).json({ error: 'Forbidden' });
+      }
+      if (!targetId || !kind || !num || num <= 0) {
+        return res.status(400).json({ error: 'targetUserId, resource and positive amount are required' });
+      }
+
+      const user = await store.getOrCreateUser(targetId);
+      const resources = user.resources || { coins: 0, gems: 0, feed: 0 };
+      const current = resources[kind] ?? 0;
+      const updated = await store.updateUser(targetId, {
+        resources: { ...resources, [kind]: current + num }
+      });
+
+      return res.json({ ok: true, resources: updated.resources });
+    } catch (err) {
+      console.error('Admin reward error:', err);
+      return res.status(500).json({ error: 'Failed to apply admin reward' });
     }
   });
 }
