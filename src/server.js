@@ -295,11 +295,20 @@ function getMongoUri() {
 
 async function main() {
   const mongoUri = getMongoUri();
-  const store = mongoUri
-    ? await (await import('./store-mongo.js')).createStore(mongoUri)
-    : (await import('./store.js')).createFileStore();
-
-  console.log(mongoUri ? 'Store: MongoDB' : 'Store: JSON file (data/users.json)');
+  let store;
+  if (mongoUri) {
+    try {
+      store = await (await import('./store-mongo.js')).createStore(mongoUri);
+      console.log('Store: MongoDB');
+    } catch (err) {
+      console.error('MongoDB connection failed after retries, falling back to JSON file store:', err.message);
+      store = (await import('./store.js')).createFileStore();
+      console.log('Store: JSON file (fallback)');
+    }
+  } else {
+    store = (await import('./store.js')).createFileStore();
+    console.log('Store: JSON file (data/users.json)');
+  }
   registerRoutes(store);
 
   if (BOT_TOKEN) {

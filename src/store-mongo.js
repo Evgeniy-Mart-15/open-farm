@@ -33,8 +33,27 @@ function defaultUser(userId) {
  * @returns {Promise<{ getOrCreateUser, updateUser, saveFarmState, bindReferrer, claimDaily, getReferralStats, getGlobalStats }>}
  */
 export async function createStore(uri) {
-  const client = new MongoClient(uri);
-  await client.connect();
+  const client = new MongoClient(uri, {
+    serverSelectionTimeoutMS: 15000,
+    connectTimeoutMS: 15000,
+    socketTimeoutMS: 30000,
+    retryWrites: true,
+    retryReads: true
+  });
+
+  // Повторные попытки подключения (до 5 раз с задержкой)
+  for (let attempt = 1; attempt <= 5; attempt++) {
+    try {
+      await client.connect();
+      console.log(`MongoDB connected (attempt ${attempt})`);
+      break;
+    } catch (err) {
+      console.error(`MongoDB connect attempt ${attempt}/5 failed:`, err.message);
+      if (attempt === 5) throw err;
+      await new Promise((r) => setTimeout(r, 3000 * attempt));
+    }
+  }
+
   const db = client.db();
   const col = db.collection(COLLECTION);
 
