@@ -76,6 +76,13 @@ export function addGems(userId, amount) {
 
 export function saveFarmState(userId, state, username) {
   const user = getOrCreateUser(userId);
+  const serverRevision = typeof user.revision === 'number' ? user.revision : 0;
+  const clientRevision = typeof state.revision === 'number' ? state.revision : 0;
+  // Если на сервере уже есть более новая ревизия, а клиент шлёт старую (или 0),
+  // игнорируем такой sync, чтобы старый клиент не откатил прогресс.
+  if (serverRevision > 0 && (clientRevision === 0 || clientRevision < serverRevision)) {
+    return user;
+  }
   // Для монет и прогресса слотов источником истины считаем клиент.
   // Для гемов берём максимум из серверного и клиентского значения, чтобы не потерять уже начисленные оплаты.
   const serverGems = user.resources?.gems ?? 0;
@@ -88,6 +95,7 @@ export function saveFarmState(userId, state, username) {
     resources,
     crops: Array.isArray(state.crops) ? state.crops : user.crops,
     animals: Array.isArray(state.animals) ? state.animals : user.animals,
+    revision: clientRevision > 0 ? clientRevision : (serverRevision > 0 ? serverRevision : 0) + 1,
     ...(username !== undefined && username !== null && { username: String(username) }),
     updatedAt: new Date().toISOString()
   };

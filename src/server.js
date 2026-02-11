@@ -66,6 +66,7 @@ function registerRoutes(store) {
       resources: user.resources,
       crops: user.crops,
       animals: user.animals,
+      revision: user.revision ?? 0,
       referrerId: user.referrerId ?? null,
       referrerUsername,
       username: user.username ?? null
@@ -90,6 +91,7 @@ function registerRoutes(store) {
       resources: user.resources,
       crops: user.crops,
       animals: user.animals,
+      revision: user.revision ?? 0,
       referrerId: user.referrerId ?? null,
       referrerUsername,
       username: user.username ?? null
@@ -106,7 +108,8 @@ function registerRoutes(store) {
         level: updated.level,
         resources: updated.resources,
         crops: updated.crops,
-        animals: updated.animals
+        animals: updated.animals,
+        revision: updated.revision ?? 0
       }
     });
   });
