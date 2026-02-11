@@ -82,9 +82,9 @@ export async function createStore(uri) {
 
   async function saveFarmState(userId, state, username) {
     const user = await getOrCreateUser(userId);
-    const serverGems = user.resources?.gems ?? 0;
-    const clientGems = state.resources?.gems ?? 0;
-    const resources = { ...user.resources, ...state.resources, gems: Math.max(serverGems, clientGems) };
+    // Клиентское состояние — источник истины для монет и гемов внутри игры.
+    // Отдельные начисления из оплаты идут через addGems и уже учитываются в user.resources.
+    const resources = { ...user.resources, ...state.resources };
     const next = {
       ...user,
       level: state.level ?? user.level,
