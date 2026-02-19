@@ -356,10 +356,18 @@ async function main() {
       'Это мини‑игра‑ферма. Открывай мини‑апп и выращивай помидоры, огурцы, коров и кур.\n' +
       refInfo;
 
+    const communityBtn = [Markup.button.url('🌱 Farm Community', 'https://t.me/farm_community')];
+
     if (webAppUrl.startsWith('https://')) {
-      await ctx.reply(text, Markup.inlineKeyboard([[Markup.button.webApp('Открыть мини‑апп', webAppUrl)]]));
+      await ctx.reply(text, Markup.inlineKeyboard([
+        [Markup.button.webApp('Открыть мини‑апп', webAppUrl)],
+        communityBtn
+      ]));
     } else {
-      await ctx.reply(`${text}\n\nЛокальный адрес: ${webAppUrl}`, Markup.inlineKeyboard([[Markup.button.url('Открыть в браузере', webAppUrl)]]));
+      await ctx.reply(`${text}\n\nЛокальный адрес: ${webAppUrl}`, Markup.inlineKeyboard([
+        [Markup.button.url('Открыть в браузере', webAppUrl)],
+        communityBtn
+      ]));
     }
   });
 
@@ -367,24 +375,37 @@ async function main() {
     const user = ctx.from;
     const webAppUrl = WEBAPP_ORIGIN + `?uid=${user.id}&v=` + Date.now();
     const text = `Привет, ${user.first_name || 'фермер'}! 🌱\nОткрывай мини‑апп и играй в ферму.`;
+    const communityBtn = [Markup.button.url('🌱 Farm Community', 'https://t.me/farm_community')];
 
     if (webAppUrl.startsWith('https://')) {
-      await ctx.reply(text, Markup.inlineKeyboard([[Markup.button.webApp('Открыть mini-app', webAppUrl)]]));
+      await ctx.reply(text, Markup.inlineKeyboard([
+        [Markup.button.webApp('Открыть mini-app', webAppUrl)],
+        communityBtn
+      ]));
     } else {
-      await ctx.reply(`${text}\n\nЛокальный адрес: ${webAppUrl}`, Markup.inlineKeyboard([[Markup.button.url('Открыть mini-app', webAppUrl)]]));
+      await ctx.reply(`${text}\n\nЛокальный адрес: ${webAppUrl}`, Markup.inlineKeyboard([
+        [Markup.button.url('Открыть mini-app', webAppUrl)],
+        communityBtn
+      ]));
     }
   });
 
-  // Админ-версия mini-app с параметром ?admin=1 для диагностики (только для тебя)
   bot.command('admin', async (ctx) => {
     const user = ctx.from;
     const webAppUrl = WEBAPP_ORIGIN + `?admin=1&uid=${user.id}&v=` + Date.now();
     const text = `Привет, ${user.first_name || 'фермер'}! 🌱\nАдмин-режим: открой мини-апп для диагностики.`;
+    const communityBtn = [Markup.button.url('🌱 Farm Community', 'https://t.me/farm_community')];
 
     if (webAppUrl.startsWith('https://')) {
-      await ctx.reply(text, Markup.inlineKeyboard([[Markup.button.webApp('Открыть mini-app (admin)', webAppUrl)]]));
+      await ctx.reply(text, Markup.inlineKeyboard([
+        [Markup.button.webApp('Открыть mini-app (admin)', webAppUrl)],
+        communityBtn
+      ]));
     } else {
-      await ctx.reply(`${text}\n\nЛокальный адрес: ${webAppUrl}`, Markup.inlineKeyboard([[Markup.button.url('Открыть mini-app (admin)', webAppUrl)]]));
+      await ctx.reply(`${text}\n\nЛокальный адрес: ${webAppUrl}`, Markup.inlineKeyboard([
+        [Markup.button.url('Открыть mini-app (admin)', webAppUrl)],
+        communityBtn
+      ]));
     }
   });
 
@@ -396,6 +417,7 @@ async function main() {
     const buttons = GEM_PACKAGES_PAYMENTS.map(pkg => 
       [Markup.button.callback(`${pkg.title} — ${pkg.stars} ⭐`, `buy_${pkg.id}`)]
     );
+    buttons.push([Markup.button.url('🌱 Farm Community', 'https://t.me/farm_community')]);
     await ctx.reply(
       '💎 Купи гемы за Telegram Stars!\n\nГемы помогают ускорять рост и получать бонусы.',
       Markup.inlineKeyboard(buttons)
